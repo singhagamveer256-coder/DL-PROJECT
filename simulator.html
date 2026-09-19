@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Signal Bench — 4:1 MUX &amp; 3:8 Decoder Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a1128;
+  --panel: #101a3d;
+  --panel-alt: #0c1533;
+  --line: #24305e;
+  --line-soft: rgba(140,160,255,0.08);
+  --wire-off: #2b3768;
+  --wire-on: #ffb84d;
+  --wire-on-glow: rgba(255,184,77,0.55);
+  --accent: #ff7a52;
+  --led-off: #1a2350;
+  --text: #e9edfb;
+  --text-dim: #8d95bd;
+  --text-faint: #5c6390;
+  --ok: #7ee6c4;
+  --font-head: 'Inter', system-ui, sans-serif;
+  --font-mono: 'Inter', system-ui, sans-serif;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+body {
+  margin: 0;
+  background: var(--bg);
+  background-image:
+    linear-gradient(var(--line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+  background-size: 28px 28px;
+  color: var(--text);
+  font-family: var(--font-head);
+  line-height: 1.5;
+  min-height: 100%;
+}
+.wrap { max-width: 980px; margin: 0 auto; padding: 28px 20px 60px; }
+header.top { margin-bottom: 22px; }
+.eyebrow-row { display:flex; align-items:center; gap:10px; margin-bottom: 6px; }
+.dot { width:9px; height:9px; border-radius:50%; background: var(--wire-on); box-shadow: 0 0 8px var(--wire-on-glow); flex: none; }
+.kicker { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-dim); letter-spacing: 0.02em; }
+h1 { font-size: clamp(22px, 4vw, 30px); font-weight: 600; margin: 0 0 8px; }
+.sub { color: var(--text-dim); font-size: 14.5px; max-width: 64ch; margin: 0; }
+
+.tabs { display:flex; gap: 8px; margin: 22px 0 18px; border-bottom: 1px solid var(--line); }
+.tab-btn {
+  font-family: var(--font-head); font-size: 14.5px; font-weight: 500;
+  background: none; border: none; color: var(--text-dim);
+  padding: 10px 4px; cursor: pointer; position: relative; top: 1px;
+  border-bottom: 2px solid transparent;
+}
+.tab-btn.active { color: var(--text); border-bottom-color: var(--wire-on); }
+.tab-btn:focus-visible { outline: 2px solid var(--wire-on); outline-offset: 3px; }
+
+.sim { display: none; }
+.sim.active { display: block; }
+
+.blurb { color: var(--text-dim); font-size: 14px; max-width: 68ch; margin: 0 0 20px; }
+
+.grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 18px; align-items: start; }
+@media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 18px;
+}
+.panel-title { font-size: 12.5px; font-family: var(--font-mono); color: var(--text-dim); margin: 0 0 14px; text-transform: lowercase; }
+
+svg.schem { width: 100%; height: auto; display: block; overflow: visible; }
+svg.schem text { font-family: var(--font-mono); fill: var(--text-dim); }
+svg.schem .lbl { font-size: 12px; fill: var(--text); }
+svg.schem .lbl-dim { font-size: 11px; fill: var(--text-faint); }
+.wire { stroke: var(--wire-off); stroke-width: 2; fill: none; transition: stroke 0.15s ease; }
+.wire.hot { stroke: var(--wire-on); filter: drop-shadow(0 0 3px var(--wire-on-glow)); }
+.wire.dim { stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 3 4; }
+.wire.dim.hot { stroke: var(--accent); }
+.box-body { fill: var(--panel-alt); stroke: var(--line); stroke-width: 1.5; }
+.box-body.disabled { stroke: var(--text-faint); opacity: 0.6; }
+.led { fill: var(--led-off); stroke: var(--line); stroke-width: 1.5; transition: fill 0.15s ease; }
+.led.lit { fill: var(--wire-on); filter: drop-shadow(0 0 5px var(--wire-on-glow)); stroke: var(--wire-on); }
+
+.controls-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+.ctrl-row {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--panel-alt); border: 1px solid var(--line); border-radius: 5px;
+  padding: 9px 12px;
+}
+.ctrl-label { font-family: var(--font-mono); font-weight: 500; font-size: 13px; color: var(--text); }
+.ctrl-label .full { color: var(--text-faint); font-size: 11.5px; margin-left: 6px; }
+
+.toggle { position: relative; display: inline-block; width: 42px; height: 23px; flex: none; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle .track {
+  position: absolute; inset: 0; background: var(--wire-off); border-radius: 12px;
+  cursor: pointer; transition: background 0.15s ease;
+  border: 1px solid var(--line);
+}
+.toggle .track::before {
+  content: ""; position: absolute; width: 15px; height: 15px; left: 3px; top: 3px;
+  background: var(--text); border-radius: 50%; transition: transform 0.15s ease;
+}
+.toggle input:checked + .track { background: var(--wire-on); border-color: var(--wire-on); box-shadow: 0 0 8px var(--wire-on-glow); }
+.toggle input:checked + .track::before { transform: translateX(19px); background: #0a1128; }
+.toggle input:focus-visible + .track { outline: 2px solid var(--wire-on); outline-offset: 2px; }
+
+.readout-row { display:flex; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
+.readout { background: var(--panel-alt); border: 1px solid var(--line); border-radius: 5px; padding: 10px 14px; flex: 1; min-width: 120px; }
+.readout .rk { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+.readout .rv { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; font-size: 20px; color: var(--wire-on); margin-top: 2px; }
+
+.eqn { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13px; color: var(--text-dim); background: var(--panel-alt); border: 1px solid var(--line); border-radius: 5px; padding: 10px 12px; margin-bottom: 18px; overflow-x: auto; white-space: nowrap; }
+.eqn b { color: var(--ok); font-weight: 600; }
+
+.tt-wrap { overflow-x: auto; }
+table.tt { border-collapse: collapse; width: 100%; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+table.tt th, table.tt td { padding: 6px 10px; text-align: center; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.tt th { color: var(--text-faint); font-weight: 500; font-size: 11px; }
+table.tt tr.current td { background: rgba(255,184,77,0.12); color: var(--text); }
+table.tt tr.current td:first-child { border-left: 2px solid var(--wire-on); }
+
+.log-panel { margin-top: 18px; }
+.log-actions { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+button.btn {
+  font-family: var(--font-mono); font-size: 12.5px; color: var(--text);
+  background: var(--panel-alt); border: 1px solid var(--line); border-radius: 5px;
+  padding: 8px 14px; cursor: pointer;
+}
+button.btn:hover { border-color: var(--wire-on); color: var(--wire-on); }
+button.btn:focus-visible { outline: 2px solid var(--wire-on); outline-offset: 2px; }
+.log-empty { color: var(--text-faint); font-size: 13px; font-family: var(--font-mono); padding: 10px 0; }
+table.logtbl { border-collapse: collapse; width: 100%; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+table.logtbl th, table.logtbl td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+table.logtbl th { color: var(--text-faint); font-weight: 500; font-size: 11px; }
+.copy-ok { color: var(--ok); font-size: 12px; font-family: var(--font-mono); margin-left: 4px; }
+
+.note { font-size: 12.5px; color: var(--text-faint); margin-top: 26px; max-width: 68ch; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow-row"><span class="dot" aria-hidden="true"></span><span class="kicker">CIA III simulator project</span></div>
+  <h1>Signal bench</h1>
+  <p class="sub">An interactive 4:1 multiplexer and 3:8 decoder. Flip the switches, watch the wires carry each bit, and log test cases straight from the truth table below.</p>
+</header>
+
+<div class="tabs" role="tablist" aria-label="Choose a simulator">
+  <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="sim-mux" id="tab-mux" onclick="switchTab('mux')">4:1 multiplexer</button>
+  <button class="tab-btn" role="tab" aria-selected="false" aria-controls="sim-dec" id="tab-dec" onclick="switchTab('dec')">3:8 decoder</button>
+</div>
+
+<section id="sim-mux" class="sim active" role="tabpanel" aria-labelledby="tab-mux">
+  <p class="blurb">A 4:1 MUX routes one of four data lines, D0&ndash;D3, to the single output Y. Two select lines, S1 and S0, choose which one &mdash; only one input's wire ever reaches the output at a time.</p>
+
+  <div class="grid">
+    <div class="panel">
+      <p class="panel-title">schematic</p>
+      <svg class="schem" viewBox="0 0 480 260" role="img" aria-label="Multiplexer schematic showing four input wires, two select lines, and one output wire">
+        <line id="m-w-d0" class="wire" x1="20" y1="40"  x2="190" y2="40"/>
+        <line id="m-w-d1" class="wire" x1="20" y1="90"  x2="190" y2="90"/>
+        <line id="m-w-d2" class="wire" x1="20" y1="140" x2="190" y2="140"/>
+        <line id="m-w-d3" class="wire" x1="20" y1="190" x2="190" y2="190"/>
+        <text x="8" y="36" class="lbl">D0</text>
+        <text x="8" y="86" class="lbl">D1</text>
+        <text x="8" y="136" class="lbl">D2</text>
+        <text x="8" y="186" class="lbl">D3</text>
+
+        <rect id="m-box" class="box-body" x="190" y="20" width="90" height="190" rx="4"/>
+        <text x="235" y="120" text-anchor="middle" class="lbl">4:1</text>
+        <text x="235" y="136" text-anchor="middle" class="lbl-dim">MUX</text>
+
+        <line id="m-w-s1" class="wire dim" x1="215" y1="245" x2="215" y2="210"/>
+        <line id="m-w-s0" class="wire dim" x1="255" y1="245" x2="255" y2="210"/>
+        <text x="215" y="258" text-anchor="middle" class="lbl-dim">S1</text>
+        <text x="255" y="258" text-anchor="middle" class="lbl-dim">S0</text>
+
+        <line id="m-w-y" class="wire" x1="280" y1="115" x2="420" y2="115"/>
+        <circle id="m-led-y" class="led" cx="436" cy="115" r="11"/>
+        <text x="452" y="119" class="lbl">Y</text>
+      </svg>
+    </div>
+
+    <div>
+      <div class="panel" style="margin-bottom:16px;">
+        <p class="panel-title">controls</p>
+        <div class="controls-list" id="mux-controls"></div>
+        <div class="readout-row">
+          <div class="readout"><div class="rk">select (S1 S0)</div><div class="rv" id="mux-sel-readout">00</div></div>
+          <div class="readout"><div class="rk">output Y</div><div class="rv" id="mux-y-readout">0</div></div>
+        </div>
+        <div class="eqn" id="mux-eqn"></div>
+      </div>
+
+      <div class="panel">
+        <p class="panel-title">truth table</p>
+        <div class="tt-wrap">
+          <table class="tt" id="mux-tt">
+            <thead><tr><th>S1</th><th>S0</th><th>selects</th><th>Y</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel log-panel">
+    <p class="panel-title">test case log</p>
+    <div class="log-actions">
+      <button class="btn" onclick="captureLog('mux')">Capture current state</button>
+      <button class="btn" onclick="clearLog('mux')">Clear log</button>
+      <button class="btn" onclick="copyLog('mux')">Copy as text<span class="copy-ok" id="mux-copy-ok"></span></button>
+    </div>
+    <div id="mux-log-area"><p class="log-empty">No test cases captured yet. Toggle the switches above, then capture a state for your report.</p></div>
+  </div>
+</section>
+
+<section id="sim-dec" class="sim" role="tabpanel" aria-labelledby="tab-dec">
+  <p class="blurb">A 3:8 decoder reads a 3-bit address, A2 A1 A0, and drives exactly one of eight outputs, Y0&ndash;Y7, high &mdash; but only while the enable line E is on. With E off, every output stays low regardless of the address.</p>
+
+  <div class="grid">
+    <div class="panel">
+      <p class="panel-title">schematic</p>
+      <svg class="schem" viewBox="0 0 480 340" role="img" aria-label="Decoder schematic showing three address wires, an enable wire, and eight output wires with indicator LEDs">
+        <line id="d-w-a2" class="wire" x1="20" y1="50"  x2="190" y2="50"/>
+        <line id="d-w-a1" class="wire" x1="20" y1="90"  x2="190" y2="90"/>
+        <line id="d-w-a0" class="wire" x1="20" y1="130" x2="190" y2="130"/>
+        <line id="d-w-en" class="wire dim" x1="20" y1="180" x2="190" y2="180"/>
+        <text x="8" y="46" class="lbl">A2</text>
+        <text x="8" y="86" class="lbl">A1</text>
+        <text x="8" y="126" class="lbl">A0</text>
+        <text x="8" y="176" class="lbl-dim">E</text>
+
+        <rect id="d-box" class="box-body" x="190" y="20" width="80" height="240" rx="4"/>
+        <text x="230" y="145" text-anchor="middle" class="lbl">3:8</text>
+        <text x="230" y="161" text-anchor="middle" class="lbl-dim">DEC</text>
+
+        <line id="d-w-y0" class="wire" x1="270" y1="30"  x2="400" y2="30"/>
+        <line id="d-w-y1" class="wire" x1="270" y1="62"  x2="400" y2="62"/>
+        <line id="d-w-y2" class="wire" x1="270" y1="94"  x2="400" y2="94"/>
+        <line id="d-w-y3" class="wire" x1="270" y1="126" x2="400" y2="126"/>
+        <line id="d-w-y4" class="wire" x1="270" y1="158" x2="400" y2="158"/>
+        <line id="d-w-y5" class="wire" x1="270" y1="190" x2="400" y2="190"/>
+        <line id="d-w-y6" class="wire" x1="270" y1="222" x2="400" y2="222"/>
+        <line id="d-w-y7" class="wire" x1="270" y1="254" x2="400" y2="254"/>
+
+        <g id="d-leds"></g>
+      </svg>
+    </div>
+
+    <div>
+      <div class="panel" style="margin-bottom:16px;">
+        <p class="panel-title">controls</p>
+        <div class="controls-list" id="dec-controls"></div>
+        <div class="readout-row">
+          <div class="readout"><div class="rk">address (A2 A1 A0)</div><div class="rv" id="dec-addr-readout">000</div></div>
+          <div class="readout"><div class="rk">active output</div><div class="rv" id="dec-active-readout">Y0</div></div>
+        </div>
+        <div class="eqn" id="dec-eqn"></div>
+      </div>
+
+      <div class="panel">
+        <p class="panel-title">truth table</p>
+        <div class="tt-wrap">
+          <table class="tt" id="dec-tt">
+            <thead><tr><th>E</th><th>A2</th><th>A1</th><th>A0</th><th>active</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel log-panel">
+    <p class="panel-title">test case log</p>
+    <div class="log-actions">
+      <button class="btn" onclick="captureLog('dec')">Capture current state</button>
+      <button class="btn" onclick="clearLog('dec')">Clear log</button>
+      <button class="btn" onclick="copyLog('dec')">Copy as text<span class="copy-ok" id="dec-copy-ok"></span></button>
+    </div>
+    <div id="dec-log-area"><p class="log-empty">No test cases captured yet. Toggle the switches above, then capture a state for your report.</p></div>
+  </div>
+</section>
+
+<p class="note">Built for CIA III (20 marks). Toggle every input combination at least once, capture each one in the test log, and screenshot the log tables for the "screenshots of working simulation and test cases" section of your report.</p>
+
+</div>
+
+<script>
+var mux = { d: [0,0,0,0], s1: 0, s0: 0 };
+var dec = { a2: 0, a1: 0, a0: 0, en: 1 };
+var logs = { mux: [], dec: [] };
+
+function switchTab(which) {
+  var isMux = which === 'mux';
+  document.getElementById('sim-mux').classList.toggle('active', isMux);
+  document.getElementById('sim-dec').classList.toggle('active', !isMux);
+  document.getElementById('tab-mux').classList.toggle('active', isMux);
+  document.getElementById('tab-dec').classList.toggle('active', !isMux);
+  document.getElementById('tab-mux').setAttribute('aria-selected', String(isMux));
+  document.getElementById('tab-dec').setAttribute('aria-selected', String(!isMux));
+}
+
+function toggleSwitch(html) {
+  return '<label class="toggle"><input type="checkbox" ' + (html.checked ? 'checked' : '') +
+    ' onchange="' + html.onchange + '"><span class="track"></span></label>';
+}
+
+function buildMuxControls() {
+  var el = document.getElementById('mux-controls');
+  var rows = [
+    { key: 'd0', label: 'D0', full: 'data input 0', get: function(){ return mux.d[0]; }, set: function(v){ mux.d[0]=v; } },
+    { key: 'd1', label: 'D1', full: 'data input 1', get: function(){ return mux.d[1]; }, set: function(v){ mux.d[1]=v; } },
+    { key: 'd2', label: 'D2', full: 'data input 2', get: function(){ return mux.d[2]; }, set: function(v){ mux.d[2]=v; } },
+    { key: 'd3', label: 'D3', full: 'data input 3', get: function(){ return mux.d[3]; }, set: function(v){ mux.d[3]=v; } },
+    { key: 's1', label: 'S1', full: 'select bit 1', get: function(){ return mux.s1; }, set: function(v){ mux.s1=v; } },
+    { key: 's0', label: 'S0', full: 'select bit 0', get: function(){ return mux.s0; }, set: function(v){ mux.s0=v; } }
+  ];
+  el.innerHTML = rows.map(function(r){
+    return '<div class="ctrl-row"><span class="ctrl-label">' + r.label + '<span class="full">' + r.full + '</span></span>' +
+      '<label class="toggle"><input type="checkbox" id="mux-in-' + r.key + '" ' + (r.get() ? 'checked' : '') +
+      ' onchange="mux.set_' + r.key + '(this.checked)"><span class="track"></span></label></div>';
+  }).join('');
+  rows.forEach(function(r){ mux['set_' + r.key] = function(checked){ r.set(checked ? 1 : 0); renderMux(); }; });
+}
+
+function buildDecControls() {
+  var el = document.getElementById('dec-controls');
+  var rows = [
+    { key: 'en', label: 'E', full: 'enable', get: function(){ return dec.en; }, set: function(v){ dec.en=v; } },
+    { key: 'a2', label: 'A2', full: 'address bit 2', get: function(){ return dec.a2; }, set: function(v){ dec.a2=v; } },
+    { key: 'a1', label: 'A1', full: 'address bit 1', get: function(){ return dec.a1; }, set: function(v){ dec.a1=v; } },
+    { key: 'a0', label: 'A0', full: 'address bit 0', get: function(){ return dec.a0; }, set: function(v){ dec.a0=v; } }
+  ];
+  el.innerHTML = rows.map(function(r){
+    return '<div class="ctrl-row"><span class="ctrl-label">' + r.label + '<span class="full">' + r.full + '</span></span>' +
+      '<label class="toggle"><input type="checkbox" id="dec-in-' + r.key + '" ' + (r.get() ? 'checked' : '') +
+      ' onchange="dec.set_' + r.key + '(this.checked)"><span class="track"></span></label></div>';
+  }).join('');
+  rows.forEach(function(r){ dec['set_' + r.key] = function(checked){ r.set(checked ? 1 : 0); renderDec(); }; });
+}
+
+function wireClass(base, on) { return on ? base + ' hot' : base; }
+
+function renderMux() {
+  var idx = (mux.s1 << 1) | mux.s0;
+  var names = ['d0','d1','d2','d3'];
+  names.forEach(function(n, i){
+    var w = document.getElementById('m-w-' + n);
+    w.setAttribute('class', wireClass('wire', mux.d[i] === 1));
+  });
+  document.getElementById('m-w-s1').setAttribute('class', wireClass('wire dim', mux.s1 === 1));
+  document.getElementById('m-w-s0').setAttribute('class', wireClass('wire dim', mux.s0 === 1));
+
+  var y = mux.d[idx];
+  document.getElementById('m-w-y').setAttribute('class', wireClass('wire', y === 1));
+  document.getElementById('m-led-y').setAttribute('class', wireClass('led', y === 1));
+
+  document.getElementById('mux-sel-readout').textContent = '' + mux.s1 + mux.s0;
+  document.getElementById('mux-y-readout').textContent = String(y);
+
+  var sels = ["S1'S0'", "S1'S0", "S1S0'", "S1S0"];
+  document.getElementById('mux-eqn').innerHTML =
+    'Y = D0S1\'S0\' + D1S1\'S0 + D2S1S0\' + D3S1S0&nbsp;&nbsp;&rarr;&nbsp;&nbsp;currently routing <b>D' + idx + '</b> (' + sels[idx] + ') to Y';
+
+  var tbody = document.querySelector('#mux-tt tbody');
+  tbody.innerHTML = '';
+  for (var s = 0; s < 4; s++) {
+    var s1 = (s >> 1) & 1, s0 = s & 1;
+    var tr = document.createElement('tr');
+    if (s === idx) tr.className = 'current';
+    tr.innerHTML = '<td>' + s1 + '</td><td>' + s0 + '</td><td>D' + s + '</td><td>' + mux.d[s] + '</td>';
+    tbody.appendChild(tr);
+  }
+}
+
+function renderDec() {
+  var addr = (dec.a2 << 2) | (dec.a1 << 1) | dec.a0;
+  document.getElementById('d-w-a2').setAttribute('class', wireClass('wire', dec.a2 === 1));
+  document.getElementById('d-w-a1').setAttribute('class', wireClass('wire', dec.a1 === 1));
+  document.getElementById('d-w-a0').setAttribute('class', wireClass('wire', dec.a0 === 1));
+  document.getElementById('d-w-en').setAttribute('class', wireClass('wire dim', dec.en === 1));
+  document.getElementById('d-box').classList.toggle('disabled', dec.en === 0);
+
+  var ledsG = document.getElementById('d-leds');
+  var ys = [30,62,94,126,158,190,222,254];
+  ledsG.innerHTML = '';
+  for (var i = 0; i < 8; i++) {
+    var lit = dec.en === 1 && addr === i;
+    document.getElementById('d-w-y' + i).setAttribute('class', wireClass('wire', lit));
+    var circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    circle.setAttribute('cx', 416); circle.setAttribute('cy', ys[i]); circle.setAttribute('r', 9);
+    circle.setAttribute('class', wireClass('led', lit).replace('wire','led').replace(' hot',' lit'));
+    ledsG.appendChild(circle);
+    var text = document.createElementNS('http://www.w3.org/2000/svg','text');
+    text.setAttribute('x', 430); text.setAttribute('y', ys[i] + 4); text.setAttribute('class','lbl');
+    text.textContent = 'Y' + i;
+    ledsG.appendChild(text);
+  }
+
+  document.getElementById('dec-addr-readout').textContent = '' + dec.a2 + dec.a1 + dec.a0;
+  document.getElementById('dec-active-readout').textContent = dec.en === 1 ? ('Y' + addr) : 'none (E=0)';
+
+  var bits = [dec.a2, dec.a1, dec.a0];
+  var names = ['A2','A1','A0'];
+  var minterm = names.map(function(n, i){ return bits[i] ? n : n + "'"; }).join('');
+  document.getElementById('dec-eqn').innerHTML =
+    'Y<sub>i</sub> = E &middot; m<sub>i</sub>(A2,A1,A0)&nbsp;&nbsp;&rarr;&nbsp;&nbsp;' +
+    (dec.en ? ('Y' + addr + ' = E&middot;' + minterm + ' = <b>1</b>') : 'E = 0, so every output is <b>0</b>');
+
+  var tbody = document.querySelector('#dec-tt tbody');
+  tbody.innerHTML = '';
+  for (var e = 1; e >= 0; e--) {
+    for (var a = 0; a < 8; a++) {
+      var a2 = (a >> 2) & 1, a1 = (a >> 1) & 1, a0 = a & 1;
+      var tr = document.createElement('tr');
+      if (dec.en === 0 ? e === 0 : (e === 1 && a === addr)) tr.className = 'current';
+      var active = e === 1 ? ('Y' + a) : '&mdash;';
+      tr.innerHTML = '<td>' + e + '</td><td>' + a2 + '</td><td>' + a1 + '</td><td>' + a0 + '</td><td>' + active + '</td>';
+      tbody.appendChild(tr);
+      if (e === 0) break;
+    }
+  }
+}
+
+function pad(s, n) { s = String(s); while (s.length < n) s = '0' + s; return s; }
+function timestamp() {
+  var d = new Date();
+  return pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2);
+}
+
+function captureLog(which) {
+  if (which === 'mux') {
+    var idx = (mux.s1 << 1) | mux.s0;
+    logs.mux.push({ t: timestamp(), d: mux.d.slice(), s1: mux.s1, s0: mux.s0, y: mux.d[idx] });
+  } else {
+    var addr = (dec.a2 << 2) | (dec.a1 << 1) | dec.a0;
+    logs.dec.push({ t: timestamp(), en: dec.en, a2: dec.a2, a1: dec.a1, a0: dec.a0, active: dec.en ? ('Y'+addr) : 'none' });
+  }
+  renderLog(which);
+}
+
+function clearLog(which) { logs[which] = []; renderLog(which); document.getElementById(which+'-copy-ok').textContent=''; }
+
+function renderLog(which) {
+  var area = document.getElementById(which + '-log-area');
+  var rows = logs[which];
+  if (!rows.length) {
+    area.innerHTML = '<p class="log-empty">No test cases captured yet. Toggle the switches above, then capture a state for your report.</p>';
+    return;
+  }
+  if (which === 'mux') {
+    var body = rows.map(function(r, i){
+      return '<tr><td>' + (i+1) + '</td><td>' + r.t + '</td><td>' + r.d.join('') + '</td><td>' + r.s1 + r.s0 + '</td><td>' + r.y + '</td></tr>';
+    }).join('');
+    area.innerHTML = '<div class="tt-wrap"><table class="logtbl"><thead><tr><th>#</th><th>time</th><th>D3D2D1D0</th><th>S1S0</th><th>Y</th></tr></thead><tbody>' + body + '</tbody></table></div>';
+  } else {
+    var body2 = rows.map(function(r, i){
+      return '<tr><td>' + (i+1) + '</td><td>' + r.t + '</td><td>' + r.en + '</td><td>' + r.a2 + r.a1 + r.a0 + '</td><td>' + r.active + '</td></tr>';
+    }).join('');
+    area.innerHTML = '<div class="tt-wrap"><table class="logtbl"><thead><tr><th>#</th><th>time</th><th>E</th><th>A2A1A0</th><th>active</th></tr></thead><tbody>' + body2 + '</tbody></table></div>';
+  }
+}
+
+function copyLog(which) {
+  var rows = logs[which];
+  var lines;
+  if (!rows.length) { lines = 'No test cases captured yet.'; }
+  else if (which === 'mux') {
+    lines = ['# 4:1 MUX test cases', 'D3D2D1D0  S1S0  Y'].concat(
+      rows.map(function(r){ return r.d.join('') + '      ' + r.s1 + r.s0 + '    ' + r.y; })
+    ).join('\n');
+  } else {
+    lines = ['# 3:8 decoder test cases', 'E  A2A1A0  active'].concat(
+      rows.map(function(r){ return r.en + '  ' + r.a2 + r.a1 + r.a0 + '     ' + r.active; })
+    ).join('\n');
+  }
+  var ok = document.getElementById(which + '-copy-ok');
+  try {
+    navigator.clipboard.writeText(lines).then(function(){
+      ok.textContent = ' copied';
+      setTimeout(function(){ ok.textContent = ''; }, 1500);
+    });
+  } catch (e) {
+    ok.textContent = ' copy failed';
+  }
+}
+
+buildMuxControls();
+buildDecControls();
+renderMux();
+renderDec();
+</script>
+</body>
+</html>
